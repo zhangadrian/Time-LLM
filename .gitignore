@@ -1,0 +1,49 @@
+# Python编译文件
+__pycache__/
+*.py[cod]
+
+# Jupyter Notebook检查点
+.ipynb_checkpoints/
+
+# 环境配置文件
+.env
+*.env
+
+# 虚拟环境
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# 数据文件和模型权重
+data/
+models/
+*.h5
+*.ckpt
+*.pth
+*.pt
+*.bin
+
+# 日志文件
+logs/
+*.log
+
+# 其他临时文件
+*.tmp
+*.temp
+
+# IDE和编辑器配置文件
+.vscode/
+.idea/
+*.swp
+
+# 依赖管理文件（如果不希望将其版本控制）
+requirements.txt
+
+# Git LFS状态文件（如果使用Git LFS）
+.lfsconfig
+
+# 输出目录（如生成的文档）
+build/
+dist/
