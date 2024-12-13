@@ -18,7 +18,6 @@ venv.bak/
 
 # 数据文件和模型权重
 data/
-models/
 *.h5
 *.ckpt
 *.pth
