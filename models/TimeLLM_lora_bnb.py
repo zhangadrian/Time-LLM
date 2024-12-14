@@ -6,7 +6,7 @@ from peft import LoraConfig, TaskType, get_peft_model
 from peft.utils import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING
 
 from transformers import LlamaConfig, LlamaModel, LlamaTokenizer, GPT2Config, GPT2Model, GPT2Tokenizer, BertConfig, \
-    BertModel, BertTokenizer, AutoTokenizer, LlamaForCausalLM
+    BertModel, BertTokenizer, AutoTokenizer, LlamaForCausalLM, BitsAndBytesConfig
 from layers.Embed import PatchEmbedding
 import transformers
 from layers.StandardNorm import Normalize
@@ -40,16 +40,23 @@ class Model(nn.Module):
         self.d_llm = configs.llm_dim
         self.patch_len = configs.patch_len
         self.stride = configs.stride
+        self.device = configs.device
 
         model_name = "meta-llama/Llama-3.1-8B"
         self.llama_config = LlamaConfig.from_pretrained(model_name)
         self.llama_config.output_attentions = True
         self.llama_config.output_hidden_states = True
+        q_config = BitsAndBytesConfig(load_in_4bit=False,
+                                bnb_4bit_quant_type='nf4',
+                                bnb_4bit_use_double_quant=True,
+                                bnb_4bit_compute_dtype=torch.float16
+                                )
 
         self.llm_model = LlamaForCausalLM.from_pretrained(
             model_name,
             trust_remote_code=True,
             config=self.llama_config,
+            quantization_config = q_config,
         )
 
         target_modules = TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING['llama']  # Modules for the Llama model
@@ -74,8 +81,8 @@ class Model(nn.Module):
             self.tokenizer.add_special_tokens({'pad_token': pad_token})
             self.tokenizer.pad_token = pad_token
 
-        for param in self.llm_model.parameters():
-            param.requires_grad = True
+        # for param in self.llm_model.parameters():
+        #     param.requires_grad = True
 
         if configs.prompt_domain:
             self.description = configs.content
@@ -144,7 +151,8 @@ class Model(nn.Module):
             prompt.append(prompt_)
 
         x_enc = x_enc.reshape(B, N, T).permute(0, 2, 1).contiguous()
-
+        x_enc.to(self.device)
+        print(x_enc.device)
         prompt = self.tokenizer(prompt, return_tensors="pt", padding=True, truncation=True, max_length=2048).input_ids
         prompt_embeddings = self.llm_model.get_input_embeddings()(prompt.to(x_enc.device))  # (batch, prompt_token, dim)
 

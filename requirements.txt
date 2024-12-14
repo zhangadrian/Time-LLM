@@ -13,3 +13,4 @@ transformers
 deepspeed
 sentencepiece
 bitsandbytes
+ipywidgets
