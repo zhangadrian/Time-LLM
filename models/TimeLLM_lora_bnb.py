@@ -155,7 +155,8 @@ class Model(nn.Module):
         print(x_enc.device)
         prompt = self.tokenizer(prompt, return_tensors="pt", padding=True, truncation=True, max_length=2048).input_ids
         prompt_embeddings = self.llm_model.get_input_embeddings()(prompt.to(x_enc.device))  # (batch, prompt_token, dim)
-
+        print(f"word_embeddings dtype: {self.word_embeddings.dtype}")
+        print(f"mapping_layer weight dtype: {self.mapping_layer.weight.dtype}")
         source_embeddings = self.mapping_layer(self.word_embeddings.permute(1, 0)).permute(1, 0)
 
         x_enc = x_enc.permute(0, 2, 1).contiguous()
