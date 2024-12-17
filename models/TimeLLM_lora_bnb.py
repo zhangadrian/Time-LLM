@@ -97,7 +97,7 @@ class Model(nn.Module):
         self.word_embeddings = self.llm_model.get_input_embeddings().weight
         self.vocab_size = self.word_embeddings.shape[0]
         self.num_tokens = 1000
-        self.mapping_layer = nn.Linear(self.vocab_size, self.num_tokens)
+        self.mapping_layer = nn.Linear(self.vocab_size, self.num_tokens).to(torch.float32)
 
         self.reprogramming_layer = ReprogrammingLayer(configs.d_model, configs.n_heads, self.d_ff, self.d_llm)
 
@@ -119,8 +119,12 @@ class Model(nn.Module):
         return None
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
-
+        # print(f"Tensor: x_enc nan: {torch.isnan(x_enc).any()}")
+        # print(f"Tensor: x_mark_enc nan: {torch.isnan(x_mark_enc).any()}")
+        # print(f"Tensor: x_dec nan: {torch.isnan(x_dec).any()}")
+        # print(f"Tensor: x_mark_dec nan: {torch.isnan(x_mark_dec).any()}")
         x_enc = self.normalize_layers(x_enc, 'norm')
+        # print(f"Tensor: norm_x_enc nan: {torch.isnan(x_enc).any()}")
 
         B, T, N = x_enc.size()
         x_enc = x_enc.permute(0, 2, 1).contiguous().reshape(B * N, T, 1)
@@ -128,8 +132,10 @@ class Model(nn.Module):
         min_values = torch.min(x_enc, dim=1)[0]
         max_values = torch.max(x_enc, dim=1)[0]
         medians = torch.median(x_enc, dim=1).values
+        # # print(f"min_values: {min_values}, max_values: {max_values} medians: {medians}")
         lags = self.calcute_lags(x_enc)
         trends = x_enc.diff(dim=1).sum(dim=1)
+        # # print(f"lags: {lags}, trends: {trends}")
 
         prompt = []
         for b in range(x_enc.shape[0]):
@@ -152,29 +158,40 @@ class Model(nn.Module):
 
         x_enc = x_enc.reshape(B, N, T).permute(0, 2, 1).contiguous()
         x_enc.to(self.device)
-        print(x_enc.device)
+        # # print(x_enc.device)
         prompt = self.tokenizer(prompt, return_tensors="pt", padding=True, truncation=True, max_length=2048).input_ids
         prompt_embeddings = self.llm_model.get_input_embeddings()(prompt.to(x_enc.device))  # (batch, prompt_token, dim)
-        print(f"word_embeddings dtype: {self.word_embeddings.dtype}")
-        print(f"mapping_layer weight dtype: {self.mapping_layer.weight.dtype}")
+        # print(f"Tensor: prompt_embeddings nan: {torch.isnan(prompt_embeddings).any()}")
+        # # print(f"word_embeddings dtype: {self.word_embeddings.dtype}")
+        # # print(f"mapping_layer weight dtype: {self.mapping_layer.weight.dtype}")
+        # self.word_embeddings.to(torch.float32)  # 确保 word_embeddings 是 float32
+        # print(f"Tensor: word_embeddings nan: {torch.isnan(self.word_embeddings).any()}")
         source_embeddings = self.mapping_layer(self.word_embeddings.permute(1, 0)).permute(1, 0)
-
+        # print(f"Tensor: source_embeddings nan: {torch.isnan(source_embeddings).any()}")
         x_enc = x_enc.permute(0, 2, 1).contiguous()
         enc_out, n_vars = self.patch_embedding(x_enc)
+        # enc_out = enc_out.to(torch.float16)
+        # # print(f"enc_out dtype: {enc_out.dtype}")
+        # # print(f"source_embeddings dtype: {source_embeddings.dtype}")
         enc_out = self.reprogramming_layer(enc_out, source_embeddings, source_embeddings)
+        # print(f"Tensor: enc_out nan: {torch.isnan(enc_out).any()}")
         llama_enc_out = torch.cat([prompt_embeddings, enc_out], dim=1)
         dec_out = self.llm_model(inputs_embeds=llama_enc_out)
         dec_out = dec_out.hidden_states[-1]
         dec_out = dec_out[:, :, :self.d_ff]
+        # print(f"Tensor: dec_out nan: {torch.isnan(dec_out).any()}")
 
         dec_out = torch.reshape(
             dec_out, (-1, n_vars, dec_out.shape[-2], dec_out.shape[-1]))
         dec_out = dec_out.permute(0, 1, 3, 2).contiguous()
-
+        # # print(f"dec_out dtype: {dec_out.dtype}")
+        # # # print(f"output_projection weight dtype: {self.output_projection.weight.dtype}")
         dec_out = self.output_projection(dec_out[:, :, :, -self.patch_nums:])
+        # print(f"Tensor: output_dec_out nan: {torch.isnan(dec_out).any()}")
         dec_out = dec_out.permute(0, 2, 1).contiguous()
 
         dec_out = self.normalize_layers(dec_out, 'denorm')
+        # print(f"Tensor: norm_dec_out nan: {torch.isnan(dec_out).any()}")
 
         return dec_out
 
